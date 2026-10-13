@@ -1,0 +1,61 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  STACK_NAME: spotter
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - run: sam build
+      - name: Deploy stack
+        run: |
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --s3-bucket "${{ vars.SAM_ARTIFACTS_BUCKET }}" \
+            --s3-prefix "$STACK_NAME" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "ApiKeyExpires=$(date -d '+60 days' +%s)"
+      - name: Stack outputs and budget
+        run: |
+          {
+            echo "## Stack outputs"
+            echo '```'
+            aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+              --query "Stacks[0].Outputs[].[OutputKey,OutputValue]" --output text
+            echo '```'
+            echo "## Budget (spotter-monthly)"
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            aws budgets describe-budget --account-id "$ACCOUNT_ID" --budget-name spotter-monthly \
+              --query "Budget.{limit:BudgetLimit.Amount,unit:BudgetLimit.Unit,actual:CalculatedSpend.ActualSpend.Amount,forecast:CalculatedSpend.ForecastedSpend.Amount}" \
+              --output table || echo "Budget not readable"
+          } >> "$GITHUB_STEP_SUMMARY"

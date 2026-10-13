@@ -1,0 +1,28 @@
+name: Destroy
+
+# Deletes the whole Spotter stack (API, Lambda, AppSync Events, DynamoDB table and its data)
+# so nothing keeps running or billing. The bootstrap stack is left in place.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type "destroy" to delete the spotter stack
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  destroy:
+    if: github.event.inputs.confirm == 'destroy'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - run: sam delete --stack-name spotter --region "${{ vars.AWS_REGION }}" --no-prompts

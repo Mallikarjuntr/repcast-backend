@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Spotter backend - live phone-to-TV link (AppSync Events), pairing and session API
+  (HTTP API + Lambda) and the data table (DynamoDB). Everything is deleted with the stack.
+
+Parameters:
+  ApiKeyExpires:
+    Type: Number
+    Description: Unix time (seconds) when the AppSync Events API key expires. The deploy workflow sets it 60 days ahead.
+  AllowedOrigins:
+    Type: CommaDelimitedList
+    Default: https://mallikarjuntr.github.io,http://localhost:5173,http://localhost:4173
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    MemorySize: 256
+    Timeout: 10
+
+Resources:
+  # Live link: the camera device publishes pose events, the TV subscribes. One channel per session.
+  EventsApi:
+    Type: AWS::AppSync::Api
+    Properties:
+      Name: spotter-events
+      EventConfig:
+        AuthProviders:
+          - AuthType: API_KEY
+        ConnectionAuthModes:
+          - AuthType: API_KEY
+        DefaultPublishAuthModes:
+          - AuthType: API_KEY
+        DefaultSubscribeAuthModes:
+          - AuthType: API_KEY
+
+  SessionNamespace:
+    Type: AWS::AppSync::ChannelNamespace
+    Properties:
+      ApiId: !GetAtt EventsApi.ApiId
+      Name: session
+
+  EventsApiKey:
+    Type: AWS::AppSync::ApiKey
+    Properties:
+      ApiId: !GetAtt EventsApi.ApiId
+      Description: Public client key for the Spotter TV and camera apps
+      Expires: !Ref ApiKeyExpires
+
+  # Provisioned 2/2 capacity stays inside DynamoDB's always-free tier.
+  DataTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      TableName: spotter-data
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: !Ref AllowedOrigins
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowHeaders: [content-type]
+        MaxAge: 600
+      # Caps abuse of the public endpoint so it can't run up a bill.
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+
+  ApiFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: /aws/lambda/spotter-api
+      RetentionInDays: 7
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: spotter-api
+      CodeUri: ./
+      Handler: index.handler
+      LoggingConfig:
+        LogGroup: !Ref ApiFunctionLogs
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref DataTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DataTable
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /health
+            Method: GET
+        CreateSession:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /sessions
+            Method: POST
+        GetSession:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /sessions/{code}
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/api/index.ts
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Minify: true
+        Sourcemap: false
+        External:
+          - '@aws-sdk/*'
+
+Outputs:
+  ApiUrl:
+    Description: Base URL of the session API.
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+  EventsHttpEndpoint:
+    Description: AppSync Events HTTP endpoint (publish).
+    Value: !GetAtt EventsApi.Dns.Http
+  EventsRealtimeEndpoint:
+    Description: AppSync Events realtime endpoint (subscribe over WebSocket).
+    Value: !GetAtt EventsApi.Dns.Realtime
+  EventsApiKey:
+    Description: Public client key for the apps (also visible in the client code).
+    Value: !GetAtt EventsApiKey.ApiKey
