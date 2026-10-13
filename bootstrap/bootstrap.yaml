@@ -11,6 +11,14 @@ Parameters:
   GitHubRepo:
     Type: String
     Default: spotter-backend
+  GitHubOwnerId:
+    Type: String
+    Default: '137713114'
+    Description: Numeric GitHub owner ID; GitHub's OIDC subject now includes it (owner@id/repo@id).
+  GitHubRepoId:
+    Type: String
+    Default: '1416925235'
+    Description: Numeric GitHub repository ID.
   CreateOidcProvider:
     Type: String
     AllowedValues: ['true', 'false']
@@ -80,9 +88,10 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               StringLike:
+                # GitHub's ID-qualified subject format, pinned to this exact owner and repository.
                 token.actions.githubusercontent.com:sub:
-                  - !Sub repo:${GitHubOwner}/${GitHubRepo}:ref:refs/heads/main
-                  - !Sub repo:${GitHubOwner}/${GitHubRepo}:ref:refs/heads/dev
+                  - !Sub repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepo}@${GitHubRepoId}:ref:refs/heads/main
+                  - !Sub repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepo}@${GitHubRepoId}:ref:refs/heads/dev
       Policies:
         - PolicyName: spotter-deploy
           PolicyDocument:
