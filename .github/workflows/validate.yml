@@ -18,6 +18,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # sam build bundles with esbuild from PATH; use the locked project version
+      - run: echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
       - run: npm run typecheck
       - run: npm test
       - uses: actions/setup-python@v5
