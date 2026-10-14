@@ -21,9 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          # Full history, to tell whether this push changed the coach's lines.
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -55,14 +52,14 @@ jobs:
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --parameter-overrides "ApiKeyExpires=$(date -d '+60 days' +%s)"
-      - name: Record the coach's voice (only when voice/phrases.json changed)
+      - name: Record the coach's voice (only when the lines change)
         env:
-          BEFORE: ${{ github.event.before }}
           BUCKET: ${{ vars.SAM_ARTIFACTS_BUCKET }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = push ] && [ -n "$BEFORE" ] && git cat-file -e "$BEFORE" 2>/dev/null \
-            && [ -z "$(git diff --name-only "$BEFORE" "$GITHUB_SHA" -- voice/phrases.json)" ]; then
-            echo "Coach lines unchanged; skipping."
+          # Recordings are stored by the line list's content, so the same lines are never paid for twice.
+          KEY="voice/voice-$(sha256sum voice/phrases.json | cut -c1-12).zip"
+          if aws s3 cp "s3://$BUCKET/$KEY" voice.zip --only-show-errors 2>/dev/null; then
+            echo "::notice title=Voice::Lines unchanged; reusing $KEY"
             exit 0
           fi
           jq -c '{phrases: .}' voice/phrases.json > payload.json
@@ -74,10 +71,14 @@ jobs:
             echo "$b64" | base64 -d > "voice-out/$id.mp3"
           done
           (cd voice-out && zip -q ../voice.zip ./*.mp3)
-          KEY="voice/voice-${GITHUB_SHA::7}.zip"
           aws s3 cp voice.zip "s3://$BUCKET/$KEY" --only-show-errors
-          echo "::notice title=Voice::$(jq -r '"\(.voice) (\(.engine)) - \(.lines) lines, \(.characters) characters"' out.json)"
-          echo "::notice title=Voice clips (link valid for 1 hour)::$(aws s3 presign "s3://$BUCKET/$KEY" --expires-in 3600)"
+          echo "::notice title=Voice::$(jq -r '"\(.voice) (\(.engine)) - \(.lines) lines, \(.characters) characters"' out.json) -> $KEY"
+      - name: Attach the voice clips to this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-clips
+          path: voice.zip
+          retention-days: 7
       - name: Stack outputs and budget
         run: |
           {
