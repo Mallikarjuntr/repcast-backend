@@ -141,6 +141,45 @@ Resources:
         External:
           - '@aws-sdk/*'
 
+  VoiceFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: /aws/lambda/spotter-voice
+      RetentionInDays: 7
+
+  # Records the coach's lines with Amazon Polly. No HTTP route: only the deploy workflow invokes it.
+  VoiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: spotter-voice
+      CodeUri: ./
+      Handler: index.handler
+      Timeout: 120
+      LoggingConfig:
+        LogGroup: !Ref VoiceFunctionLogs
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - polly:SynthesizeSpeech
+                - polly:DescribeVoices
+              Resource: '*'
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/voice/index.ts
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Minify: true
+        Sourcemap: false
+        External:
+          - '@aws-sdk/*'
+
 Outputs:
   ApiUrl:
     Description: Base URL of the session API.
