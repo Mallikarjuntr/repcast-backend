@@ -1,7 +1,47 @@
 [
   {
+    "id": "arms-out-wide-small-circles-then-1q9537a",
+    "text": "Arms out wide, small circles — then bigger"
+  },
+  {
     "id": "arms-up-lean-slowly-side-to-side-8zh4cg",
     "text": "Arms up, lean slowly side to side"
+  },
+  {
+    "id": "back-against-the-wall-thighs-lev-1fz4iok",
+    "text": "Back against the wall, thighs level — hold"
+  },
+  {
+    "id": "bend-a-little-more-about-halfway-1j8skr7",
+    "text": "Bend a little more — about halfway down"
+  },
+  {
+    "id": "bend-your-knee-and-lift-your-foo-16mgm2g",
+    "text": "Bend your knee and lift your foot onto your standing leg"
+  },
+  {
+    "id": "calf-raises-fifteen-reps-at-your-1s5hn3s",
+    "text": "Calf raises. Fifteen reps. At your own pace."
+  },
+  {
+    "id": "calf-raises-fifteen-reps-up-onto-11inod2",
+    "text": "Calf raises. Fifteen reps. Up onto your toes."
+  },
+  {
+    "id": "chest-dropped-too-far-that-one-d-48z3eh",
+    "text": "Chest dropped too far — that one doesn't count"
+  },
+  {
+    "id": "come-a-little-closer-1ptu5wu",
+    "text": "Come a little closer."
+  },
+  {
+    "id": "curtsy-lunges-ten-reps-at-your-o-1u0cop",
+    "text": "Curtsy lunges. Ten reps. At your own pace."
+  },
+  {
+    "id": "curtsy-lunges-ten-reps-step-back-13war4j",
+    "text": "Curtsy lunges. Ten reps. Step back and across."
   },
   {
     "id": "eight-49hyom",
@@ -24,6 +64,10 @@
     "text": "fifteen"
   },
   {
+    "id": "finish-each-rep-standing-tall-1qrpfk3",
+    "text": "Finish each rep standing tall"
+  },
+  {
     "id": "five-ykhh0v",
     "text": "five"
   },
@@ -36,16 +80,92 @@
     "text": "fourteen"
   },
   {
+    "id": "get-down-into-a-plank-body-flat-1u0373r",
+    "text": "Get down into a plank — body flat"
+  },
+  {
+    "id": "glute-bridges-twelve-reps-at-you-19gmnw2",
+    "text": "Glute bridges. Twelve reps. At your own pace."
+  },
+  {
+    "id": "glute-bridges-twelve-reps-lie-ba-z16r13",
+    "text": "Glute bridges. Twelve reps. Lie back, knees bent."
+  },
+  {
+    "id": "go-a-little-lower-chest-towards-12m9szp",
+    "text": "Go a little lower — chest towards the floor"
+  },
+  {
+    "id": "go-a-little-lower-hips-to-knee-l-1mlrjrt",
+    "text": "Go a little lower — hips to knee level"
+  },
+  {
+    "id": "half-squats-twelve-reps-at-your-lgh7u5",
+    "text": "Half squats. Twelve reps. At your own pace."
+  },
+  {
     "id": "half-squats-twelve-reps-only-go-17rvfog",
     "text": "Half squats. Twelve reps. Only go halfway."
+  },
+  {
+    "id": "hands-on-your-hips-draw-big-slow-x76dop",
+    "text": "Hands on your hips, draw big slow circles"
+  },
+  {
+    "id": "heels-up-to-your-seat-quick-and-1pvdq0e",
+    "text": "Heels up to your seat, quick and light"
+  },
+  {
+    "id": "hips-sagged-too-far-that-one-doe-2htub7",
+    "text": "Hips sagged too far — that one doesn't count"
   },
   {
     "id": "hold-a-straight-line-from-should-14qdvoc",
     "text": "Hold a straight line from shoulders to heels"
   },
   {
+    "id": "i-can-see-you-press-start-when-y-1aqqrcj",
+    "text": "I can see you. Press start when you're ready."
+  },
+  {
+    "id": "i-can-t-see-you-step-into-view-o-1cml2ia",
+    "text": "I can't see you. Step into view of the phone."
+  },
+  {
     "id": "jumping-jacks-twenty-light-on-yo-1d1t6qw",
     "text": "Jumping jacks. Twenty. Light on your feet."
+  },
+  {
+    "id": "jumping-jacks-twenty-reps-at-you-1j62h3f",
+    "text": "Jumping jacks. Twenty reps. At your own pace."
+  },
+  {
+    "id": "keep-one-foot-forward-and-one-ba-1r0kvts",
+    "text": "Keep one foot forward and one back — this set is split squats"
+  },
+  {
+    "id": "keep-your-chest-tall-klz2n1",
+    "text": "Keep your chest tall"
+  },
+  {
+    "id": "keep-your-chest-up-pe3q9h",
+    "text": "Keep your chest up"
+  },
+  {
+    "id": "keep-your-standing-leg-straight-sbj8bz",
+    "text": "Keep your standing leg straight"
+  },
+  {
+    "id": "knee-push-ups-ten-reps-at-your-o-9axm5l",
+    "text": "Knee push-ups. Ten reps. At your own pace."
+  },
+  {
+    "id": "knee-push-ups-ten-reps-phone-on-jaahot",
+    "text": "Knee push-ups. Ten reps. Phone on the floor, side-on."
+  },
+  {
+    "id": "knees-caved-in-too-far-that-one-lu5mas",
+    "text": "Knees caved in too far — that one doesn't count"
   },
   {
     "id": "knees-down-straight-line-from-sh-1ylcx9v",
@@ -56,12 +176,52 @@
     "text": "Knees up to hip height — quick feet"
   },
   {
+    "id": "leaned-too-far-forward-that-one-5kpoy",
+    "text": "Leaned too far forward — that one doesn't count"
+  },
+  {
+    "id": "level-your-hips-1nofce8",
+    "text": "Level your hips"
+  },
+  {
+    "id": "lift-your-hips-a-little-1bt1k86",
+    "text": "Lift your hips a little"
+  },
+  {
+    "id": "lift-your-hips-higher-squeeze-at-t70rd9",
+    "text": "Lift your hips higher — squeeze at the top"
+  },
+  {
+    "id": "lower-your-hips-15xocep",
+    "text": "Lower your hips"
+  },
+  {
+    "id": "lower-your-hips-into-one-straigh-147ebq3",
+    "text": "Lower your hips into one straight line"
+  },
+  {
+    "id": "lunges-ten-reps-at-your-own-pace-k4msun",
+    "text": "Lunges. Ten reps. At your own pace."
+  },
+  {
     "id": "lunges-ten-reps-swap-legs-whenev-2fktuy",
     "text": "Lunges. Ten reps. Swap legs whenever you like."
   },
   {
+    "id": "make-a-straight-line-from-should-1au4ssz",
+    "text": "Make a straight line from shoulders to heels"
+  },
+  {
     "id": "march-on-the-spot-easy-pace-arms-zzhfnc",
     "text": "March on the spot — easy pace, arms swinging"
+  },
+  {
+    "id": "move-a-little-to-your-left-95z9h2",
+    "text": "Move a little to your left."
+  },
+  {
+    "id": "move-a-little-to-your-right-mbiitl",
+    "text": "Move a little to your right."
   },
   {
     "id": "nine-yknmnj",
@@ -72,16 +232,56 @@
     "text": "nineteen"
   },
   {
+    "id": "no-rep-ysvtzr",
+    "text": "No rep."
+  },
+  {
+    "id": "not-deep-enough-that-one-doesn-t-adg83i",
+    "text": "Not deep enough — that one doesn't count"
+  },
+  {
+    "id": "not-low-enough-that-one-doesn-t-18wsktu",
+    "text": "Not low enough — that one doesn't count"
+  },
+  {
     "id": "one-377esn",
     "text": "one"
+  },
+  {
+    "id": "phone-connected-now-step-into-vi-1arl2kz",
+    "text": "Phone connected. Now step into view."
+  },
+  {
+    "id": "push-ups-ten-reps-at-your-own-pa-7okgli",
+    "text": "Push-ups. Ten reps. At your own pace."
+  },
+  {
+    "id": "push-ups-ten-reps-phone-on-the-f-1937x56",
+    "text": "Push-ups. Ten reps. Phone on the floor, side-on."
+  },
+  {
+    "id": "push-your-knees-out-1mz5iyq",
+    "text": "Push your knees out"
   },
   {
     "id": "reach-up-tall-then-let-your-arms-uw32y2",
     "text": "Reach up tall, then let your arms float down"
   },
   {
+    "id": "rest-next-calf-raises-hnk38n",
+    "text": "Rest. Next, calf raises."
+  },
+  {
+    "id": "rest-next-curtsy-lunges-1gfcf1e",
+    "text": "Rest. Next, curtsy lunges."
+  },
+  {
     "id": "rest-next-forearm-plank-w2le6k",
     "text": "Rest. Next, forearm plank."
+  },
+  {
+    "id": "rest-next-glute-bridges-nin217",
+    "text": "Rest. Next, glute bridges."
   },
   {
     "id": "rest-next-half-squats-1ah0vmu",
@@ -96,12 +296,20 @@
     "text": "Rest. Next, knee plank."
   },
   {
+    "id": "rest-next-knee-push-ups-91eez6",
+    "text": "Rest. Next, knee push-ups."
+  },
+  {
     "id": "rest-next-lunges-1yl7520",
     "text": "Rest. Next, lunges."
   },
   {
     "id": "rest-next-plank-6p2erk",
     "text": "Rest. Next, plank."
+  },
+  {
+    "id": "rest-next-push-ups-12ccxlb",
+    "text": "Rest. Next, push-ups."
   },
   {
     "id": "rest-next-reach-and-breathe-r59fy3",
@@ -140,6 +348,18 @@
     "text": "Rest. Next, sumo squats."
   },
   {
+    "id": "rest-next-torso-twists-15vdbv3",
+    "text": "Rest. Next, torso twists."
+  },
+  {
+    "id": "rest-next-wall-sit-dvlf4a",
+    "text": "Rest. Next, wall sit."
+  },
+  {
+    "id": "reverse-lunges-ten-reps-at-your-uk34ln",
+    "text": "Reverse lunges. Ten reps. At your own pace."
+  },
+  {
     "id": "reverse-lunges-ten-reps-step-bac-1e2lin6",
     "text": "Reverse lunges. Ten reps. Step back, then return."
   },
@@ -150,6 +370,10 @@
   {
     "id": "set-2-12-reps-1so9plo",
     "text": "Set 2. 12 reps."
+  },
+  {
+    "id": "set-2-15-reps-1lpvktb",
+    "text": "Set 2. 15 reps."
   },
   {
     "id": "set-2-20-reps-gh90sb",
@@ -168,6 +392,14 @@
     "text": "seventeen"
   },
   {
+    "id": "sink-a-little-lower-back-knee-to-12tg6ht",
+    "text": "Sink a little lower — back knee towards the floor"
+  },
+  {
+    "id": "sit-a-little-lower-thighs-toward-1es5pus",
+    "text": "Sit a little lower — thighs towards level"
+  },
+  {
     "id": "six-377i1l",
     "text": "six"
   },
@@ -176,20 +408,64 @@
     "text": "sixteen"
   },
   {
+    "id": "split-squats-ten-reps-at-your-ow-jcrxce",
+    "text": "Split squats. Ten reps. At your own pace."
+  },
+  {
     "id": "split-squats-ten-reps-feet-stay-1ga1van",
     "text": "Split squats. Ten reps. Feet stay where they are."
+  },
+  {
+    "id": "squats-twelve-reps-at-your-own-p-zrd2gi",
+    "text": "Squats. Twelve reps. At your own pace."
   },
   {
     "id": "squats-twelve-reps-follow-the-be-njeult",
     "text": "Squats. Twelve reps. Follow the beat."
   },
   {
+    "id": "squeeze-your-glutes-keep-your-hi-1yiy2uj",
+    "text": "Squeeze your glutes — keep your hips up"
+  },
+  {
+    "id": "stand-tall-1m726bw",
+    "text": "Stand tall"
+  },
+  {
+    "id": "stay-down-in-position-for-the-wh-dehsm0",
+    "text": "Stay down in position for the whole rep"
+  },
+  {
+    "id": "step-back-a-little-co4d9r",
+    "text": "Step back a little."
+  },
+  {
+    "id": "step-jacks-twenty-reps-at-your-o-qcieq5",
+    "text": "Step jacks. Twenty reps. At your own pace."
+  },
+  {
     "id": "step-jacks-twenty-step-out-arms-pozrlx",
     "text": "Step jacks. Twenty. Step out, arms up — no jumping."
   },
   {
+    "id": "step-one-foot-back-and-across-th-182h2dy",
+    "text": "Step one foot back and across — this set is curtsy lunges"
+  },
+  {
+    "id": "step-one-foot-back-that-was-a-sq-10k71id",
+    "text": "Step one foot back — that was a squat, this set is lunges"
+  },
+  {
+    "id": "step-one-foot-forward-that-was-a-1hkf7t",
+    "text": "Step one foot forward — that was a squat, this set is lunges"
+  },
+  {
     "id": "step-out-tap-in-side-to-side-eas-13us2gs",
     "text": "Step out, tap in — side to side, easy rhythm"
+  },
+  {
+    "id": "sumo-squats-twelve-reps-at-your-kh5wza",
+    "text": "Sumo squats. Twelve reps. At your own pace."
   },
   {
     "id": "sumo-squats-twelve-reps-feet-wid-1ilipv5",
@@ -200,8 +476,16 @@
     "text": "ten"
   },
   {
+    "id": "that-s-a-lunge-this-set-is-squat-ltf5p2",
+    "text": "That's a lunge — this set is squats, feet side by side"
+  },
+  {
     "id": "that-s-the-session-well-done-1oing97",
     "text": "That's the session. Well done."
+  },
+  {
+    "id": "the-camera-moved-keep-the-phone-f6931i",
+    "text": "The camera moved — keep the phone still"
   },
   {
     "id": "thirteen-1kq063s",
@@ -212,12 +496,20 @@
     "text": "three"
   },
   {
+    "id": "turn-the-phone-about-forty-five-15jdlqy",
+    "text": "Turn the phone about forty-five degrees, so I can see both legs."
+  },
+  {
     "id": "twelve-8ml7gc",
     "text": "twelve"
   },
   {
     "id": "twenty-8ml93k",
     "text": "twenty"
+  },
+  {
+    "id": "twist-side-to-side-hips-facing-f-smqeq2",
+    "text": "Twist side to side, hips facing forward"
   },
   {
     "id": "two-377j8f",
