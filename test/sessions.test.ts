@@ -2,14 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { isValidCode, newCode, newSession, SESSION_TTL_SECONDS, sessionKey } from '../src/api/sessions.js';
 
 describe('sessions', () => {
-  it('makes 4-digit codes, keeping leading zeros', () => {
-    for (let i = 0; i < 500; i++) expect(newCode()).toMatch(/^\d{4}$/);
+  it('makes 6-digit codes, keeping leading zeros', () => {
+    for (let i = 0; i < 500; i++) expect(newCode()).toMatch(/^\d{6}$/);
   });
 
-  it('accepts only 4-digit codes', () => {
-    expect(isValidCode('0427')).toBe(true);
-    expect(isValidCode('427')).toBe(false);
-    expect(isValidCode('12a4')).toBe(false);
+  it('accepts only 6-digit codes', () => {
+    expect(isValidCode('004271')).toBe(true);
+    expect(isValidCode('0427')).toBe(false);
+    expect(isValidCode('1234567')).toBe(false);
+    expect(isValidCode('12a456')).toBe(false);
     expect(isValidCode(undefined)).toBe(false);
   });
 

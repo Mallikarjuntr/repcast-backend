@@ -7,7 +7,7 @@ AWS infrastructure and serverless functions for [Spotter](https://github.com/Mal
 | Resource | Purpose | Cost notes |
 |---|---|---|
 | AppSync Events API (`spotter-events`) | Live link: the camera device publishes pose events, the TV subscribes (one channel per session) | ~$1 per million messages |
-| HTTP API + Lambda (`spotter-api`) | `GET /health`, `POST /sessions` (new 4-digit pairing code), `GET /sessions/{code}` | Free tier; throttled to 10 req/s |
+| HTTP API + Lambda (`spotter-api`) | `GET /health`, `POST /sessions` (new 6-digit pairing code), `GET /sessions/{code}` | Free tier; throttled to 10 req/s |
 | DynamoDB (`spotter-data`) | Sessions (auto-expire after 2 hours via TTL), later workout history | Provisioned 2/2, inside the always-free tier |
 | CloudWatch log group | Lambda logs, kept 7 days | Free tier |
 

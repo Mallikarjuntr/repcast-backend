@@ -3,7 +3,9 @@ import { randomInt, randomUUID } from 'node:crypto';
 /** Pairing codes and their sessions expire after this long. */
 export const SESSION_TTL_SECONDS = 2 * 60 * 60;
 
-const CODE_PATTERN = /^\d{4}$/;
+// 6 digits: a million codes. At the API's 10 requests a second, trying them all takes ~28 hours,
+// far longer than a code lives (4 digits took ~17 minutes).
+const CODE_PATTERN = /^\d{6}$/;
 
 export interface Session {
   code: string;
@@ -18,9 +20,9 @@ export function isValidCode(code: string | undefined): code is string {
   return code !== undefined && CODE_PATTERN.test(code);
 }
 
-/** A 4-digit code that is easy to read off a TV and type on a phone. */
+/** A 6-digit code that is still easy to read off a TV and type on a phone. */
 export function newCode(): string {
-  return randomInt(0, 10_000).toString().padStart(4, '0');
+  return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
 export function newSession(code: string, now = new Date()): Session {
