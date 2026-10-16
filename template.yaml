@@ -10,7 +10,7 @@ Parameters:
     Description: Unix time (seconds) when the AppSync Events API key expires. The deploy workflow sets it 60 days ahead.
   AllowedOrigins:
     Type: CommaDelimitedList
-    Default: https://mallikarjuntr.github.io,http://localhost:5173,http://localhost:4173
+    Default: https://mallikarjuntr.github.io,https://spotter-tv.netlify.app,http://localhost:5173,http://localhost:4173
 
 Globals:
   Function:
