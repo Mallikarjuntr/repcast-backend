@@ -88,6 +88,11 @@ Resources:
       DefaultRouteSettings:
         ThrottlingBurstLimit: 20
         ThrottlingRateLimit: 10
+      # Each AI analysis costs money (Bedrock), so this route is held much tighter.
+      RouteSettings:
+        'POST /coach/analysis':
+          ThrottlingBurstLimit: 2
+          ThrottlingRateLimit: 1
 
   ApiFunctionLogs:
     Type: AWS::Logs::LogGroup
@@ -143,6 +148,75 @@ Resources:
         Sourcemap: false
         External:
           - '@aws-sdk/*'
+
+  CoachFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: /aws/lambda/spotter-coach
+      RetentionInDays: 7
+
+  # "Analyse with AI": the TV sends a workout's numbers (no video, no body points) and Claude on
+  # Amazon Bedrock writes the report. The Bedrock keys are read from Parameter Store at runtime.
+  CoachFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: spotter-coach
+      CodeUri: ./
+      Handler: index.handler
+      # API Gateway gives up at 30 s.
+      Timeout: 29
+      LoggingConfig:
+        LogGroup: !Ref CoachFunctionLogs
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref DataTable
+          BEDROCK_REGION: us-east-1
+          BEDROCK_MODEL: anthropic.claude-opus-5-5
+          BEDROCK_FALLBACK_MODEL: anthropic.claude-sonnet-5-5
+          KEY_ID_PARAM: /spotter/bedrock/access-key-id
+          SECRET_PARAM: /spotter/bedrock/secret-access-key
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DataTable
+        - Statement:
+            - Effect: Allow
+              Action: ssm:GetParameters
+              Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/spotter/bedrock/*
+            - Effect: Allow
+              Action: kms:Decrypt
+              Resource: '*'
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+      Events:
+        Analyse:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /coach/analysis
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/coach/index.ts
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        Minify: true
+        Sourcemap: false
+        # The Bedrock SDK and its AWS credential helpers are bundled; only the clients the
+        # Lambda runtime is known to ship stay external.
+        External:
+          - '@aws-sdk/client-dynamodb'
+          - '@aws-sdk/lib-dynamodb'
+          - '@aws-sdk/client-ssm'
+        # Bundled CommonJS packages require Node built-ins (http, fs, crypto); give the ES module a require().
+        Banner:
+          - js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);
 
   VoiceFunctionLogs:
     Type: AWS::Logs::LogGroup
