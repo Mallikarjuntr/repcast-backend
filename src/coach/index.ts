@@ -2,8 +2,8 @@ import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { GetParametersCommand, SSMClient } from '@aws-sdk/client-ssm';
 import Anthropic from '@anthropic-ai/sdk';
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
-import { z } from 'zod';
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { sessionKey } from '../api/sessions.js';
 import { AnalysisRequest, Report, SYSTEM_PROMPT, userMessage } from './report.js';
@@ -11,11 +11,13 @@ import { AnalysisRequest, Report, SYSTEM_PROMPT, userMessage } from './report.js
 const TABLE_NAME = process.env.TABLE_NAME ?? '';
 const BEDROCK_REGION = process.env.BEDROCK_REGION ?? 'us-east-1';
 /**
- * Inference profiles to try, best first. The org account's keys allow the classic InvokeModel API
- * but not the newer bedrock-mantle one, and which models they reach can't be listed from here, so a
- * model that's refused or unknown is skipped and the first that answers is kept for the container.
+ * Inference profiles to try, in order. Haiku first: the numbers are summarised in code, so the
+ * writing is light, and Haiku answers fastest at a fraction of Opus's price. The org account's keys
+ * allow the classic InvokeModel API but not the newer bedrock-mantle one, and which models they
+ * reach can't be listed from here, so a model that's refused or unknown is skipped and the first
+ * that answers is kept for the container.
  */
-const MODELS = (process.env.BEDROCK_MODELS ?? 'global.anthropic.claude-opus-5-5,global.anthropic.claude-opus-5,global.anthropic.claude-opus-4-8,global.anthropic.claude-haiku-5-5')
+const MODELS = (process.env.BEDROCK_MODELS ?? 'global.anthropic.claude-haiku-5-5,global.anthropic.claude-opus-5-5,global.anthropic.claude-opus-5,global.anthropic.claude-opus-4-8')
   .split(',')
   .map((m) => m.trim())
   .filter(Boolean);
@@ -49,13 +51,6 @@ async function client(): Promise<AnthropicBedrock> {
   return bedrock;
 }
 
-/**
- * The report comes back as the input of a tool the model must call: tool use works on every Claude
- * model through InvokeModel, unlike structured-output settings.
- */
-const { $schema: _, ...reportSchema } = z.toJSONSchema(Report) as { $schema?: string; type: 'object' } & Record<string, unknown>;
-const REPORT_TOOL = { name: 'write_report', description: 'Hand the finished report to the TV.', input_schema: reportSchema };
-
 /** Errors that say "this model isn't available to these keys" (unknown id, no access, not enabled), not "Bedrock is down". */
 const tryNext = (err: unknown) => err instanceof Anthropic.APIError && (err.status === 400 || err.status === 403 || err.status === 404);
 
@@ -66,20 +61,18 @@ async function writeReport(content: string): Promise<Report | null> {
     const at = (working + i) % MODELS.length;
     const model = MODELS[at]!;
     try {
-      const response = await bedrock.messages.create({
+      const response = await bedrock.messages.parse({
         model,
-        max_tokens: 2000,
+        max_tokens: 8000,
+        // Low effort keeps the wait short; the task is light.
+        output_config: { effort: 'low', format: zodOutputFormat(Report) },
         system: SYSTEM_PROMPT,
-        tools: [REPORT_TOOL],
-        tool_choice: { type: 'tool', name: REPORT_TOOL.name },
         messages: [{ role: 'user', content }],
       });
-      const call = response.content.find((b) => b.type === 'tool_use');
-      const report = Report.safeParse(call?.input);
-      if (report.success) {
+      if (response.stop_reason !== 'refusal' && response.parsed_output) {
         working = at;
         console.log('report', { model, input: response.usage.input_tokens, output: response.usage.output_tokens });
-        return report.data;
+        return response.parsed_output;
       }
       // A refusal or a malformed report: another model may still write it.
       console.error('No report', model, response.stop_reason);
