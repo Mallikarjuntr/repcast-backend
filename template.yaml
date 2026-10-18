@@ -173,8 +173,8 @@ Resources:
         Variables:
           TABLE_NAME: !Ref DataTable
           BEDROCK_REGION: us-east-1
-          BEDROCK_MODEL: anthropic.claude-opus-5-5
-          BEDROCK_FALLBACK_MODEL: anthropic.claude-sonnet-5-5
+          # Classic InvokeModel inference profiles, best first (see src/coach/index.ts).
+          BEDROCK_MODELS: global.anthropic.claude-opus-5-5,global.anthropic.claude-opus-5,global.anthropic.claude-opus-4-8,global.anthropic.claude-haiku-5-5
           KEY_ID_PARAM: /spotter/bedrock/access-key-id
           SECRET_PARAM: /spotter/bedrock/secret-access-key
       Policies:

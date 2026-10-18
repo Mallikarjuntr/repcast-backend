@@ -1,17 +1,26 @@
 import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { GetParametersCommand, SSMClient } from '@aws-sdk/client-ssm';
-import Anthropic, { betaRefusalFallbackMiddleware } from '@anthropic-ai/sdk';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
-import { AnthropicBedrockMantle } from '@anthropic-ai/bedrock-sdk';
+import Anthropic from '@anthropic-ai/sdk';
+import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
+import { z } from 'zod';
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { sessionKey } from '../api/sessions.js';
 import { AnalysisRequest, Report, SYSTEM_PROMPT, userMessage } from './report.js';
 
 const TABLE_NAME = process.env.TABLE_NAME ?? '';
 const BEDROCK_REGION = process.env.BEDROCK_REGION ?? 'us-east-1';
-const MODEL = process.env.BEDROCK_MODEL ?? 'anthropic.claude-opus-5-5';
-const FALLBACK_MODEL = process.env.BEDROCK_FALLBACK_MODEL ?? 'anthropic.claude-sonnet-5-5';
+/**
+ * Inference profiles to try, best first. The org account's keys allow the classic InvokeModel API
+ * but not the newer bedrock-mantle one, and which models they reach can't be listed from here, so a
+ * model that's refused or unknown is skipped and the first that answers is kept for the container.
+ */
+const MODELS = (process.env.BEDROCK_MODELS ?? 'global.anthropic.claude-opus-5-5,global.anthropic.claude-opus-5,global.anthropic.claude-opus-4-8,global.anthropic.claude-haiku-5-5')
+  .split(',')
+  .map((m) => m.trim())
+  .filter(Boolean);
+/** API Gateway gives up at 30 s: don't start another model after this. */
+const LAST_START_MS = 14_000;
 const KEY_ID_PARAM = process.env.KEY_ID_PARAM ?? '/spotter/bedrock/access-key-id';
 const SECRET_PARAM = process.env.SECRET_PARAM ?? '/spotter/bedrock/secret-access-key';
 /** Reports one pairing session may ask for: the endpoint is public and each report costs money. */
@@ -20,30 +29,66 @@ const MAX_BODY_BYTES = 32_000;
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const ssm = new SSMClient({});
-let bedrock: AnthropicBedrockMantle | null = null;
+let bedrock: AnthropicBedrock | null = null;
+/** Index into MODELS of the last model that answered. */
+let working = 0;
 
 function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
   return { statusCode, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) };
 }
 
 /** The Bedrock keys live encrypted in Parameter Store (never in code or config); read once per container. */
-async function client(): Promise<AnthropicBedrockMantle> {
+async function client(): Promise<AnthropicBedrock> {
   if (bedrock) return bedrock;
   const { Parameters = [] } = await ssm.send(new GetParametersCommand({ Names: [KEY_ID_PARAM, SECRET_PARAM], WithDecryption: true }));
   const value = (name: string) => Parameters.find((p) => p.Name === name)?.Value;
   const awsAccessKey = value(KEY_ID_PARAM);
-  const awsSecretAccessKey = value(SECRET_PARAM);
-  if (!awsAccessKey || !awsSecretAccessKey) throw new Error('Bedrock keys are missing from Parameter Store');
-  bedrock = new AnthropicBedrockMantle({
-    awsRegion: BEDROCK_REGION,
-    awsAccessKey,
-    awsSecretAccessKey,
-    // If Opus declines (its safety classifiers), the same request is retried on Sonnet.
-    middleware: [betaRefusalFallbackMiddleware([{ model: FALLBACK_MODEL }])],
-    maxRetries: 1,
-    timeout: 25_000,
-  });
+  const awsSecretKey = value(SECRET_PARAM);
+  if (!awsAccessKey || !awsSecretKey) throw new Error('Bedrock keys are missing from Parameter Store');
+  bedrock = new AnthropicBedrock({ awsRegion: BEDROCK_REGION, awsAccessKey, awsSecretKey, maxRetries: 0, timeout: 20_000 });
   return bedrock;
+}
+
+/**
+ * The report comes back as the input of a tool the model must call: tool use works on every Claude
+ * model through InvokeModel, unlike structured-output settings.
+ */
+const { $schema: _, ...reportSchema } = z.toJSONSchema(Report) as { $schema?: string; type: 'object' } & Record<string, unknown>;
+const REPORT_TOOL = { name: 'write_report', description: 'Hand the finished report to the TV.', input_schema: reportSchema };
+
+/** Errors that say "this model isn't available to these keys" (unknown id, no access, not enabled), not "Bedrock is down". */
+const tryNext = (err: unknown) => err instanceof Anthropic.APIError && (err.status === 400 || err.status === 403 || err.status === 404);
+
+async function writeReport(content: string): Promise<Report | null> {
+  const bedrock = await client();
+  const started = Date.now();
+  for (let i = 0; i < MODELS.length && Date.now() - started < LAST_START_MS; i++) {
+    const at = (working + i) % MODELS.length;
+    const model = MODELS[at]!;
+    try {
+      const response = await bedrock.messages.create({
+        model,
+        max_tokens: 2000,
+        system: SYSTEM_PROMPT,
+        tools: [REPORT_TOOL],
+        tool_choice: { type: 'tool', name: REPORT_TOOL.name },
+        messages: [{ role: 'user', content }],
+      });
+      const call = response.content.find((b) => b.type === 'tool_use');
+      const report = Report.safeParse(call?.input);
+      if (report.success) {
+        working = at;
+        console.log('report', { model, input: response.usage.input_tokens, output: response.usage.output_tokens });
+        return report.data;
+      }
+      // A refusal or a malformed report: another model may still write it.
+      console.error('No report', model, response.stop_reason);
+    } catch (err) {
+      if (!tryNext(err)) throw err;
+      console.error('Skipping model', model, (err as InstanceType<typeof Anthropic.APIError>).status, (err as Error).message);
+    }
+  }
+  return null;
 }
 
 /** One write checks the session is live and this TV's, and counts the report against its limit. */
@@ -81,20 +126,9 @@ async function analyse(body: string | undefined): Promise<APIGatewayProxyResultV
     return json(403, { error: 'This session has ended or used its analyses. Start a new session to analyse again.' });
   }
 
-  const response = await (await client()).messages.parse({
-    model: MODEL,
-    max_tokens: 8000,
-    // Low effort keeps the wait short; the numbers are summarised in code, so the task is light.
-    output_config: { effort: 'low', format: zodOutputFormat(Report) },
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userMessage(request.data) }],
-  });
-  if (response.stop_reason === 'refusal' || !response.parsed_output) {
-    console.error('No report', response.stop_reason, response.stop_details ?? null);
-    return json(502, { error: "The coach couldn't write this one. Try again in a moment." });
-  }
-  console.log('report', { model: response.model, input: response.usage.input_tokens, output: response.usage.output_tokens });
-  return json(200, { report: response.parsed_output });
+  const report = await writeReport(userMessage(request.data));
+  if (!report) return json(502, { error: "The coach couldn't write this one. Try again in a moment." });
+  return json(200, { report });
 }
 
 export async function handler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
