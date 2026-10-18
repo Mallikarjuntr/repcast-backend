@@ -10,6 +10,7 @@
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "0.34.2",
     "@anthropic-ai/sdk": "0.131.0",
+    "@aws-sdk/client-bedrock-runtime": "3.1146.0",
     "zod": "4.6.5"
   },
   "devDependencies": {
@@ -22,5 +23,8 @@
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vitest": "^5.0.4"
+  },
+  "overrides": {
+    "@aws-sdk/client-bedrock-runtime": "$@aws-sdk/client-bedrock-runtime"
   }
 }

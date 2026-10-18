@@ -1,26 +1,29 @@
 import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { GetParametersCommand, SSMClient } from '@aws-sdk/client-ssm';
+import { BedrockRuntimeClient, BedrockRuntimeServiceException, ConverseCommand, type ToolInputSchema } from '@aws-sdk/client-bedrock-runtime';
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
+import { z } from 'zod';
 import { sessionKey } from '../api/sessions.js';
 import { AnalysisRequest, Report, SYSTEM_PROMPT, userMessage } from './report.js';
 
 const TABLE_NAME = process.env.TABLE_NAME ?? '';
-const BEDROCK_REGION = process.env.BEDROCK_REGION ?? 'us-east-1';
 /**
- * Inference profiles to try, in order. Haiku first: the numbers are summarised in code, so the
- * writing is light, and Haiku answers fastest at a fraction of Opus's price. The org account's keys
- * allow the classic InvokeModel API but not the newer bedrock-mantle one, and which models they
- * reach can't be listed from here, so a model that's refused or unknown is skipped and the first
- * that answers is kept for the container.
+ * Models to try, in order; the first that answers is kept for the container. Two kinds:
+ * - Amazon Nova (`amazon.` ids) runs in this account and region, called with the Lambda's own role.
+ * - Claude (`anthropic.` ids) runs in the org account, with keys kept in Parameter Store. Those keys
+ *   aren't allowed to invoke models yet, so Claude is left out of the list until they are.
+ * A model that's refused or unknown is skipped.
  */
-const MODELS = (process.env.BEDROCK_MODELS ?? 'global.anthropic.claude-haiku-5-5,global.anthropic.claude-opus-5-5,global.anthropic.claude-opus-5,global.anthropic.claude-opus-4-8')
+const MODELS = (process.env.BEDROCK_MODELS ?? 'global.amazon.nova-2-lite-v1:0')
   .split(',')
   .map((m) => m.trim())
   .filter(Boolean);
+/** Region of the org account's Claude models. */
+const CLAUDE_REGION = process.env.CLAUDE_REGION ?? 'us-east-1';
 /** API Gateway gives up at 30 s: don't start another model after this. */
 const LAST_START_MS = 14_000;
 const KEY_ID_PARAM = process.env.KEY_ID_PARAM ?? '/spotter/bedrock/access-key-id';
@@ -31,7 +34,8 @@ const MAX_BODY_BYTES = 32_000;
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const ssm = new SSMClient({});
-let bedrock: AnthropicBedrock | null = null;
+const runtime = new BedrockRuntimeClient({ maxAttempts: 1, requestHandler: { requestTimeout: 20_000 } });
+let claude: AnthropicBedrock | null = null;
 /** Index into MODELS of the last model that answered. */
 let working = 0;
 
@@ -39,46 +43,79 @@ function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
   return { statusCode, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) };
 }
 
-/** The Bedrock keys live encrypted in Parameter Store (never in code or config); read once per container. */
-async function client(): Promise<AnthropicBedrock> {
-  if (bedrock) return bedrock;
+/** The org account's keys live encrypted in Parameter Store (never in code or config); read once per container. */
+async function claudeClient(): Promise<AnthropicBedrock> {
+  if (claude) return claude;
   const { Parameters = [] } = await ssm.send(new GetParametersCommand({ Names: [KEY_ID_PARAM, SECRET_PARAM], WithDecryption: true }));
   const value = (name: string) => Parameters.find((p) => p.Name === name)?.Value;
   const awsAccessKey = value(KEY_ID_PARAM);
   const awsSecretKey = value(SECRET_PARAM);
   if (!awsAccessKey || !awsSecretKey) throw new Error('Bedrock keys are missing from Parameter Store');
-  bedrock = new AnthropicBedrock({ awsRegion: BEDROCK_REGION, awsAccessKey, awsSecretKey, maxRetries: 0, timeout: 20_000 });
-  return bedrock;
+  claude = new AnthropicBedrock({ awsRegion: CLAUDE_REGION, awsAccessKey, awsSecretKey, maxRetries: 0, timeout: 20_000 });
+  return claude;
 }
 
-/** Errors that say "this model isn't available to these keys" (unknown id, no access, not enabled), not "Bedrock is down". */
-const tryNext = (err: unknown) => err instanceof Anthropic.APIError && (err.status === 400 || err.status === 403 || err.status === 404);
+async function claudeReport(model: string, content: string): Promise<Report | null> {
+  const response = await (await claudeClient()).messages.parse({
+    model,
+    max_tokens: 8000,
+    // Low effort keeps the wait short; the task is light.
+    output_config: { effort: 'low', format: zodOutputFormat(Report) },
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content }],
+  });
+  console.log('usage', { model, input: response.usage.input_tokens, output: response.usage.output_tokens, stop: response.stop_reason });
+  return response.stop_reason !== 'refusal' ? response.parsed_output : null;
+}
 
-async function writeReport(content: string): Promise<Report | null> {
-  const bedrock = await client();
+/** Nova returns the report as the input of a tool it is told to call (Converse's way of getting JSON back). */
+const { $schema: _, ...reportSchema } = z.toJSONSchema(Report) as Record<string, unknown>;
+const REPORT_TOOL = { name: 'write_report', description: 'Hand the finished report to the TV.' };
+
+async function novaReport(model: string, content: string): Promise<Report | null> {
+  const out = await runtime.send(
+    new ConverseCommand({
+      modelId: model,
+      system: [{ text: SYSTEM_PROMPT }],
+      messages: [{ role: 'user', content: [{ text: content }] }],
+      inferenceConfig: { maxTokens: 2000, temperature: 0.4 },
+      toolConfig: {
+        tools: [{ toolSpec: { ...REPORT_TOOL, inputSchema: { json: reportSchema } as ToolInputSchema } }],
+        toolChoice: { tool: { name: REPORT_TOOL.name } },
+      },
+    }),
+  );
+  console.log('usage', { model, input: out.usage?.inputTokens, output: out.usage?.outputTokens, stop: out.stopReason });
+  const call = out.output?.message?.content?.find((block) => block.toolUse)?.toolUse;
+  const report = Report.safeParse(call?.input);
+  if (!report.success) console.error('Bad report', model, report.error.message.slice(0, 500));
+  return report.success ? report.data : null;
+}
+
+/** Errors that say "this model isn't available here" (unknown id, no access, not enabled), not "Bedrock is down". */
+function unavailable(err: unknown): number | null {
+  const status =
+    err instanceof Anthropic.APIError ? err.status : err instanceof BedrockRuntimeServiceException ? err.$metadata.httpStatusCode : undefined;
+  return status === 400 || status === 403 || status === 404 ? status : null;
+}
+
+async function writeReport(content: string): Promise<(Report & { writtenBy: string }) | null> {
   const started = Date.now();
   for (let i = 0; i < MODELS.length && Date.now() - started < LAST_START_MS; i++) {
     const at = (working + i) % MODELS.length;
     const model = MODELS[at]!;
+    const claudeModel = model.includes('anthropic.');
     try {
-      const response = await bedrock.messages.parse({
-        model,
-        max_tokens: 8000,
-        // Low effort keeps the wait short; the task is light.
-        output_config: { effort: 'low', format: zodOutputFormat(Report) },
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content }],
-      });
-      if (response.stop_reason !== 'refusal' && response.parsed_output) {
+      const report = claudeModel ? await claudeReport(model, content) : await novaReport(model, content);
+      if (report) {
         working = at;
-        console.log('report', { model, input: response.usage.input_tokens, output: response.usage.output_tokens });
-        return response.parsed_output;
+        return { ...report, writtenBy: claudeModel ? 'Claude' : 'Amazon Nova' };
       }
       // A refusal or a malformed report: another model may still write it.
-      console.error('No report', model, response.stop_reason);
     } catch (err) {
-      if (!tryNext(err)) throw err;
-      console.error('Skipping model', model, (err as InstanceType<typeof Anthropic.APIError>).status, (err as Error).message);
+      const status = unavailable(err);
+      if (status === null) throw err;
+      console.error('Skipping model', model, status, (err as Error).message);
     }
   }
   return null;

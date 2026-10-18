@@ -157,8 +157,10 @@ Resources:
       LogGroupName: /aws/lambda/spotter-coach
       RetentionInDays: 7
 
-  # "Analyse with AI": the TV sends a workout's numbers (no video, no body points) and Claude on
-  # Amazon Bedrock writes the report. The Bedrock keys are read from Parameter Store at runtime.
+  # "Analyse with AI": the TV sends a workout's numbers (no video, no body points) and a model on
+  # Amazon Bedrock writes the report: Amazon Nova in this account, with the function's own role.
+  # Claude in the org account (keys in Parameter Store) can be added to BEDROCK_MODELS once those
+  # keys may invoke models.
   CoachFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -172,9 +174,9 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref DataTable
-          BEDROCK_REGION: us-east-1
-          # Classic InvokeModel inference profiles, best first (see src/coach/index.ts).
-          BEDROCK_MODELS: global.anthropic.claude-haiku-5-5,global.anthropic.claude-opus-5-5,global.anthropic.claude-opus-5,global.anthropic.claude-opus-4-8
+          # Models to try, in order (see src/coach/index.ts).
+          BEDROCK_MODELS: global.amazon.nova-2-lite-v1:0
+          CLAUDE_REGION: us-east-1
           KEY_ID_PARAM: /spotter/bedrock/access-key-id
           SECRET_PARAM: /spotter/bedrock/secret-access-key
       Policies:
@@ -190,6 +192,13 @@ Resources:
               Condition:
                 StringEquals:
                   kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+            # Nova 2 Lite through its global inference profile, which may run it in any region.
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/global.amazon.nova-2-lite-v1:0
+                - arn:aws:bedrock:*::foundation-model/amazon.nova-2-lite-v1:0
+                - arn:aws:bedrock:::foundation-model/amazon.nova-2-lite-v1:0
       Events:
         Analyse:
           Type: HttpApi
