@@ -9,7 +9,10 @@ AWS infrastructure and serverless functions for [Spotter](https://github.com/Mal
 | AppSync Events API (`spotter-events`) | Live link: the camera device publishes pose events, the TV subscribes (one channel per session) | ~$1 per million messages |
 | HTTP API + Lambda (`spotter-api`) | `GET /health`, `POST /sessions` (new 6-digit pairing code), `GET /sessions/{code}` | Free tier; throttled to 10 req/s |
 | DynamoDB (`spotter-data`) | Sessions (auto-expire after 2 hours via TTL), later workout history | Provisioned 2/2, inside the always-free tier |
-| CloudWatch log group | Lambda logs, kept 7 days | Free tier |
+| Amazon Polly + Lambda (`spotter-voice`) | Records the coach's voice: every line the TV says (counts, form cues, rest, finish) as an MP3 with the neural voice *Kajal*. The Deploy workflow runs it when `voice/phrases.json` changes and attaches the clips to the run; the TV app bundles them, because Fire TV's own text-to-speech is silent for apps. No public route | About $0.06 for all 117 lines; only re-recorded when the lines change |
+| Amazon Bedrock + Lambda (`spotter-coach`) | "Analyse with AI": `POST /coach/analysis` takes one workout's numbers (reps, verdicts, depth, pace; never video) and a model writes a short coach report for the TV. Models are tried in order from `BEDROCK_MODELS` (Amazon Nova 2 Lite via Converse with the function's own role; Claude via a second account's keys in Parameter Store). Each pairing session may ask for 10 reports | Under ₹0.50 ($0.005) a report with Nova 2 Lite |
+| SSM Parameter Store | Keeps the second account's Bedrock keys encrypted, read only by `spotter-coach` | Free |
+| CloudWatch log groups | Lambda logs, kept 7 days | Free tier |
 
 Everything is deleted with the stack.
 
