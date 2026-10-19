@@ -12,18 +12,19 @@ import { AnalysisRequest, Report, SYSTEM_PROMPT, userMessage } from './report.js
 
 const TABLE_NAME = process.env.TABLE_NAME ?? '';
 /**
- * Models to try, in order; the first that answers is kept for the container. Two kinds:
- * - Claude (`anthropic.` ids) runs in the org account, with keys kept in Parameter Store. Haiku
- *   comes first: the cheapest Claude, and the facts are summarised in code, so the writing is light.
- * - Amazon Nova (`amazon.` ids) runs in this account and region, called with the Lambda's own role.
+ * Models to try, in order; the first that answers is kept for the container. Three kinds:
+ * - `org:<model id>`: any Bedrock model (Amazon Nova Lite, for one) in the org account, called with
+ *   the keys kept in Parameter Store.
+ * - Claude (`anthropic.` ids): also in the org account, with the same keys.
+ * - Other ids (Amazon Nova): this account and region, called with the Lambda's own role.
  * A model that's refused or unknown is skipped (and logged with the reason).
  */
-const MODELS = (process.env.BEDROCK_MODELS ?? 'global.anthropic.claude-haiku-5-5,global.amazon.nova-2-lite-v1:0')
+const MODELS = (process.env.BEDROCK_MODELS ?? 'org:amazon.nova-lite-v1:0,global.anthropic.claude-haiku-5-5,global.amazon.nova-2-lite-v1:0')
   .split(',')
   .map((m) => m.trim())
   .filter(Boolean);
-/** Region of the org account's Claude models. */
-const CLAUDE_REGION = process.env.CLAUDE_REGION ?? 'us-east-1';
+/** Region of the org account's models. */
+const ORG_REGION = process.env.ORG_REGION ?? process.env.CLAUDE_REGION ?? 'us-east-1';
 /** API Gateway gives up at 30 s: don't start another model after this. */
 const LAST_START_MS = 14_000;
 const KEY_ID_PARAM = process.env.KEY_ID_PARAM ?? '/spotter/bedrock/access-key-id';
@@ -36,6 +37,8 @@ const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const ssm = new SSMClient({});
 const runtime = new BedrockRuntimeClient({ maxAttempts: 1, requestHandler: { requestTimeout: 20_000 } });
 let claude: AnthropicBedrock | null = null;
+let orgRuntime: BedrockRuntimeClient | null = null;
+let orgKeysCache: { accessKeyId: string; secretAccessKey: string } | null = null;
 /** Index into MODELS of the last model that answered. */
 let working = 0;
 
@@ -44,15 +47,27 @@ function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
 }
 
 /** The org account's keys live encrypted in Parameter Store (never in code or config); read once per container. */
-async function claudeClient(): Promise<AnthropicBedrock> {
-  if (claude) return claude;
+async function orgKeys(): Promise<{ accessKeyId: string; secretAccessKey: string }> {
+  if (orgKeysCache) return orgKeysCache;
   const { Parameters = [] } = await ssm.send(new GetParametersCommand({ Names: [KEY_ID_PARAM, SECRET_PARAM], WithDecryption: true }));
   const value = (name: string) => Parameters.find((p) => p.Name === name)?.Value;
-  const awsAccessKey = value(KEY_ID_PARAM);
-  const awsSecretKey = value(SECRET_PARAM);
-  if (!awsAccessKey || !awsSecretKey) throw new Error('Bedrock keys are missing from Parameter Store');
-  claude = new AnthropicBedrock({ awsRegion: CLAUDE_REGION, awsAccessKey, awsSecretKey, maxRetries: 0, timeout: 20_000 });
+  const accessKeyId = value(KEY_ID_PARAM);
+  const secretAccessKey = value(SECRET_PARAM);
+  if (!accessKeyId || !secretAccessKey) throw new Error('Bedrock keys are missing from Parameter Store');
+  orgKeysCache = { accessKeyId, secretAccessKey };
+  return orgKeysCache;
+}
+
+async function claudeClient(): Promise<AnthropicBedrock> {
+  if (claude) return claude;
+  const { accessKeyId: awsAccessKey, secretAccessKey: awsSecretKey } = await orgKeys();
+  claude = new AnthropicBedrock({ awsRegion: ORG_REGION, awsAccessKey, awsSecretKey, maxRetries: 0, timeout: 20_000 });
   return claude;
+}
+
+async function orgRuntimeClient(): Promise<BedrockRuntimeClient> {
+  orgRuntime ??= new BedrockRuntimeClient({ region: ORG_REGION, credentials: await orgKeys(), maxAttempts: 1, requestHandler: { requestTimeout: 20_000 } });
+  return orgRuntime;
 }
 
 async function claudeReport(model: string, content: string): Promise<Report | null> {
@@ -72,8 +87,8 @@ async function claudeReport(model: string, content: string): Promise<Report | nu
 const { $schema: _, ...reportSchema } = z.toJSONSchema(Report) as Record<string, unknown>;
 const REPORT_TOOL = { name: 'write_report', description: 'Hand the finished report to the TV.' };
 
-async function novaReport(model: string, content: string): Promise<Report | null> {
-  const out = await runtime.send(
+async function novaReport(model: string, content: string, client: BedrockRuntimeClient = runtime): Promise<Report | null> {
+  const out = await client.send(
     new ConverseCommand({
       modelId: model,
       system: [{ text: SYSTEM_PROMPT }],
@@ -104,9 +119,11 @@ async function writeReport(content: string): Promise<(Report & { writtenBy: stri
   for (let i = 0; i < MODELS.length && Date.now() - started < LAST_START_MS; i++) {
     const at = (working + i) % MODELS.length;
     const model = MODELS[at]!;
-    const claudeModel = model.includes('anthropic.');
+    const org = model.startsWith('org:');
+    const id = org ? model.slice(4) : model;
+    const claudeModel = id.includes('anthropic.');
     try {
-      const report = claudeModel ? await claudeReport(model, content) : await novaReport(model, content);
+      const report = claudeModel ? await claudeReport(id, content) : await novaReport(id, content, org ? await orgRuntimeClient() : runtime);
       if (report) {
         working = at;
         return { ...report, writtenBy: claudeModel ? 'Claude' : 'Amazon Nova' };
