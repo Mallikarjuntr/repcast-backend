@@ -1,10 +1,12 @@
 import { DescribeVoicesCommand, PollyClient, SynthesizeSpeechCommand, type Engine, type VoiceId } from '@aws-sdk/client-polly';
 import { validatePhrases } from './phrases.js';
 
-const polly = new PollyClient({});
+// Polly throttles bursts ("Rate exceeded" on 2026-10-19 with 4 at a time and the default 3 tries):
+// fewer at once, and adaptive retries that slow down when told to.
+const polly = new PollyClient({ maxAttempts: 10, retryMode: 'adaptive' });
 const LANGUAGE = 'en-IN';
 const PREFERRED_VOICE = 'Kajal';
-const PARALLEL = 4;
+const PARALLEL = 2;
 
 interface VoiceEvent {
   phrases: unknown;
