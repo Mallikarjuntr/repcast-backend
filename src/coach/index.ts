@@ -1,5 +1,5 @@
-import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBClient, TransactionCanceledException } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { GetParametersCommand, SSMClient } from '@aws-sdk/client-ssm';
 import { BedrockRuntimeClient, BedrockRuntimeServiceException, ConverseCommand, type ToolInputSchema } from '@aws-sdk/client-bedrock-runtime';
 import Anthropic from '@anthropic-ai/sdk';
@@ -29,8 +29,14 @@ const ORG_REGION = process.env.ORG_REGION ?? process.env.CLAUDE_REGION ?? 'ap-so
 const LAST_START_MS = 14_000;
 const KEY_ID_PARAM = process.env.KEY_ID_PARAM ?? '/spotter/bedrock/access-key-id';
 const SECRET_PARAM = process.env.SECRET_PARAM ?? '/spotter/bedrock/secret-access-key';
-/** Reports one pairing session may ask for: the endpoint is public and each report costs money. */
+/**
+ * The endpoint is public and each report costs money (about $0.0003 on Nova Lite; budgeted at
+ * $0.005), so: 3 per move and 10 per pairing session (a session lives 2 hours), and 150 a day for
+ * everyone together, which caps the worst case near $0.75 a day. The TV's charts don't need the AI.
+ */
+const MAX_PER_MOVE = 3;
 const MAX_PER_SESSION = 10;
+const MAX_PER_DAY = 150;
 const MAX_BODY_BYTES = 32_000;
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -163,24 +169,64 @@ async function writeReport(content: string): Promise<(Report & { writtenBy: stri
   return null;
 }
 
-/** One write checks the session is live and this TV's, and counts the report against its limit. */
-async function useAllowance(code: string, channel: string): Promise<boolean> {
+type Allowance = { ok: true; left: { move: number; session: number } } | { ok: false; status: number; error: string };
+
+/**
+ * Checks the session is live and this TV's and that the limits allow one more report, then counts
+ * it against the session, the move and the day in one transaction (so two TVs can't both take the
+ * last one).
+ */
+async function useAllowance(code: string, channel: string, moveId: string): Promise<Allowance> {
+  const now = Math.floor(Date.now() / 1000);
+  const moveAttr = `analyses_${moveId}`;
+  const { Item } = await db.send(new GetCommand({ TableName: TABLE_NAME, Key: sessionKey(code) }));
+  if (!Item || Item.channel !== channel || Item.ttl <= now) {
+    return { ok: false, status: 403, error: 'This session has ended. Start a new session to analyse again.' };
+  }
+  const session = Number(Item.analyses ?? 0);
+  const move = Number(Item[moveAttr] ?? 0);
+  if (move >= MAX_PER_MOVE) {
+    return { ok: false, status: 429, error: `That's all ${MAX_PER_MOVE} AI notes for this move this session. Your charts are all here — or try another move.` };
+  }
+  if (session >= MAX_PER_SESSION) {
+    return { ok: false, status: 429, error: `This session has used its ${MAX_PER_SESSION} AI notes. Your charts are all here; pair again later for more.` };
+  }
+  const day = new Date().toISOString().slice(0, 10);
   try {
     await db.send(
-      new UpdateCommand({
-        TableName: TABLE_NAME,
-        Key: sessionKey(code),
-        UpdateExpression: 'ADD analyses :one',
-        ConditionExpression: 'attribute_exists(pk) AND channel = :channel AND #ttl > :now AND (attribute_not_exists(analyses) OR analyses < :max)',
-        ExpressionAttributeNames: { '#ttl': 'ttl' },
-        ExpressionAttributeValues: { ':one': 1, ':channel': channel, ':now': Math.floor(Date.now() / 1000), ':max': MAX_PER_SESSION },
+      new TransactWriteCommand({
+        TransactItems: [
+          {
+            Update: {
+              TableName: TABLE_NAME,
+              Key: sessionKey(code),
+              UpdateExpression: 'ADD analyses :one, #mv :one',
+              ConditionExpression: 'channel = :channel AND #ttl > :now AND (attribute_not_exists(analyses) OR analyses < :maxSession) AND (attribute_not_exists(#mv) OR #mv < :maxMove)',
+              ExpressionAttributeNames: { '#ttl': 'ttl', '#mv': moveAttr },
+              ExpressionAttributeValues: { ':one': 1, ':channel': channel, ':now': now, ':maxSession': MAX_PER_SESSION, ':maxMove': MAX_PER_MOVE },
+            },
+          },
+          {
+            Update: {
+              TableName: TABLE_NAME,
+              Key: { pk: `COACH#DAY#${day}`, sk: 'META' },
+              UpdateExpression: 'ADD reports :one SET #ttl = if_not_exists(#ttl, :expires)',
+              ConditionExpression: 'attribute_not_exists(reports) OR reports < :maxDay',
+              ExpressionAttributeNames: { '#ttl': 'ttl' },
+              ExpressionAttributeValues: { ':one': 1, ':maxDay': MAX_PER_DAY, ':expires': now + 3 * 24 * 60 * 60 },
+            },
+          },
+        ],
       }),
     );
-    return true;
   } catch (err) {
-    if (err instanceof ConditionalCheckFailedException) return false;
-    throw err;
+    if (!(err instanceof TransactionCanceledException)) throw err;
+    if (err.CancellationReasons?.[1]?.Code === 'ConditionalCheckFailed') {
+      return { ok: false, status: 429, error: "Spotter's AI coach has written all its notes for today. Your charts are all here; try the AI note tomorrow." };
+    }
+    return { ok: false, status: 429, error: 'Someone else just asked too. Try again in a moment.' };
   }
+  return { ok: true, left: { move: MAX_PER_MOVE - move - 1, session: MAX_PER_SESSION - session - 1 } };
 }
 
 async function analyse(body: string | undefined): Promise<APIGatewayProxyResultV2> {
@@ -194,15 +240,14 @@ async function analyse(body: string | undefined): Promise<APIGatewayProxyResultV
   const request = AnalysisRequest.safeParse(parsed);
   if (!request.success) return json(400, { error: "That workout doesn't look right." });
   if (request.data.attempts.length === 0) return json(400, { error: 'There are no reps to analyse yet.' });
-  if (!(await useAllowance(request.data.code, request.data.channel))) {
-    return json(403, { error: 'This session has ended or used its analyses. Start a new session to analyse again.' });
-  }
+  const allowance = await useAllowance(request.data.code, request.data.channel, request.data.move.id);
+  if (!allowance.ok) return json(allowance.status, { error: allowance.error });
 
   // Shape only, never the numbers themselves: enough to tell a TV that sent no history from a model that ignored it.
   console.log('request', { move: request.data.move.id, attempts: request.data.attempts.length, previous: request.data.previous.length });
   const report = await writeReport(userMessage(request.data));
   if (!report) return json(502, { error: "The coach couldn't write this one. Try again in a moment." });
-  return json(200, { report });
+  return json(200, { report, left: allowance.left });
 }
 
 export async function handler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
