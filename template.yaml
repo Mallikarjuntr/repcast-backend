@@ -158,9 +158,9 @@ Resources:
       RetentionInDays: 7
 
   # "Analyse with AI": the TV sends a workout's numbers (no video, no body points) and a model on
-  # Amazon Bedrock writes the report: Claude Haiku 4.5 in the org account (keys in Parameter Store;
-  # its policy allows that model through the India inference profile), or Amazon Nova in this
-  # account with the function's own role.
+  # Amazon Bedrock writes the report: Amazon Nova Lite or Claude Haiku 4.5 in the org account (keys
+  # in Parameter Store; Nova needs no Marketplace subscription), or Amazon Nova in this account with
+  # the function's own role.
   CoachFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -175,7 +175,7 @@ Resources:
         Variables:
           TABLE_NAME: !Ref DataTable
           # Models to try, in order (see src/coach/index.ts).
-          BEDROCK_MODELS: in.anthropic.claude-haiku-4-5-20251001-v1:0,global.amazon.nova-2-lite-v1:0
+          BEDROCK_MODELS: org:apac.amazon.nova-lite-v1:0,in.anthropic.claude-haiku-4-5-20251001-v1:0,global.amazon.nova-2-lite-v1:0
           ORG_REGION: ap-south-1
           KEY_ID_PARAM: /spotter/bedrock/access-key-id
           SECRET_PARAM: /spotter/bedrock/secret-access-key

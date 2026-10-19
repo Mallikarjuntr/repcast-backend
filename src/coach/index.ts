@@ -19,7 +19,7 @@ const TABLE_NAME = process.env.TABLE_NAME ?? '';
  * - Other ids (Amazon Nova): this account and region, called with the Lambda's own role.
  * A model that's refused or unknown is skipped (and logged with the reason).
  */
-const MODELS = (process.env.BEDROCK_MODELS ?? 'in.anthropic.claude-haiku-4-5-20251001-v1:0,global.amazon.nova-2-lite-v1:0')
+const MODELS = (process.env.BEDROCK_MODELS ?? 'org:apac.amazon.nova-lite-v1:0,in.anthropic.claude-haiku-4-5-20251001-v1:0,global.amazon.nova-2-lite-v1:0')
   .split(',')
   .map((m) => m.trim())
   .filter(Boolean);
