@@ -19,12 +19,12 @@ const TABLE_NAME = process.env.TABLE_NAME ?? '';
  * - Other ids (Amazon Nova): this account and region, called with the Lambda's own role.
  * A model that's refused or unknown is skipped (and logged with the reason).
  */
-const MODELS = (process.env.BEDROCK_MODELS ?? 'org:amazon.nova-lite-v1:0,global.anthropic.claude-haiku-5-5,global.amazon.nova-2-lite-v1:0')
+const MODELS = (process.env.BEDROCK_MODELS ?? 'in.anthropic.claude-haiku-4-5-20251001-v1:0,global.amazon.nova-2-lite-v1:0')
   .split(',')
   .map((m) => m.trim())
   .filter(Boolean);
-/** Region of the org account's models. */
-const ORG_REGION = process.env.ORG_REGION ?? process.env.CLAUDE_REGION ?? 'us-east-1';
+/** Region of the org account's models (its policy allows Claude Haiku 4.5 through the India profile). */
+const ORG_REGION = process.env.ORG_REGION ?? process.env.CLAUDE_REGION ?? 'ap-south-1';
 /** API Gateway gives up at 30 s: don't start another model after this. */
 const LAST_START_MS = 14_000;
 const KEY_ID_PARAM = process.env.KEY_ID_PARAM ?? '/spotter/bedrock/access-key-id';
@@ -70,8 +70,36 @@ async function orgRuntimeClient(): Promise<BedrockRuntimeClient> {
   return orgRuntime;
 }
 
+/** Some models return the report as the input of a tool they're told to call (a way of getting JSON back). */
+const { $schema: _, ...reportSchema } = z.toJSONSchema(Report) as Record<string, unknown>;
+const REPORT_TOOL = { name: 'write_report', description: 'Hand the finished report to the TV.' };
+
+/**
+ * Claude 4.5 and older (Haiku 4.5 is what the org account allows) don't take the effort setting,
+ * and structured output isn't on every Bedrock route for them, so they hand the report back as a
+ * tool call they're told to make, which every Claude model on Bedrock supports. Newer models use
+ * structured output (they reject forced tool calls).
+ */
+const olderClaude = (model: string) => /claude-(haiku|sonnet|opus)-4-[0-5]|claude-3/.test(model);
+
 async function claudeReport(model: string, content: string): Promise<Report | null> {
-  const response = await (await claudeClient()).messages.parse({
+  const client = await claudeClient();
+  if (olderClaude(model)) {
+    const response = await client.messages.create({
+      model,
+      max_tokens: 2000,
+      system: SYSTEM_PROMPT,
+      tools: [{ ...REPORT_TOOL, input_schema: reportSchema as Anthropic.Tool.InputSchema }],
+      tool_choice: { type: 'tool', name: REPORT_TOOL.name },
+      messages: [{ role: 'user', content }],
+    });
+    console.log('usage', { model, input: response.usage.input_tokens, output: response.usage.output_tokens, stop: response.stop_reason });
+    const call = response.content.find((block) => block.type === 'tool_use');
+    const report = Report.safeParse(call?.type === 'tool_use' ? call.input : null);
+    if (!report.success) console.error('Bad report', model, report.error.message.slice(0, 500));
+    return report.success ? report.data : null;
+  }
+  const response = await client.messages.parse({
     model,
     max_tokens: 8000,
     // Low effort keeps the wait short; the task is light.
@@ -83,9 +111,6 @@ async function claudeReport(model: string, content: string): Promise<Report | nu
   return response.stop_reason !== 'refusal' ? response.parsed_output : null;
 }
 
-/** Nova returns the report as the input of a tool it is told to call (Converse's way of getting JSON back). */
-const { $schema: _, ...reportSchema } = z.toJSONSchema(Report) as Record<string, unknown>;
-const REPORT_TOOL = { name: 'write_report', description: 'Hand the finished report to the TV.' };
 
 async function novaReport(model: string, content: string, client: BedrockRuntimeClient = runtime): Promise<Report | null> {
   const out = await client.send(
