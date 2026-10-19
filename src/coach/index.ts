@@ -198,6 +198,8 @@ async function analyse(body: string | undefined): Promise<APIGatewayProxyResultV
     return json(403, { error: 'This session has ended or used its analyses. Start a new session to analyse again.' });
   }
 
+  // Shape only, never the numbers themselves: enough to tell a TV that sent no history from a model that ignored it.
+  console.log('request', { move: request.data.move.id, attempts: request.data.attempts.length, previous: request.data.previous.length });
   const report = await writeReport(userMessage(request.data));
   if (!report) return json(502, { error: "The coach couldn't write this one. Try again in a moment." });
   return json(200, { report });

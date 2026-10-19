@@ -129,7 +129,7 @@ Fields:
 - coachNote: 1–2 sentences, the coach's overall word.
 - howItWent: 2 sentences on the session as a whole.
 - numbers: 2 to 4 findings from the data, each a short title (2–4 words) and one sentence. Look at: depth consistency across sets, whether later sets got shallower or faster (tiredness), pace, the most common form note and when it started.
-- comparedWithLastTime: 1–2 sentences comparing with the earlier sessions given; if there are none, say this is the first one on record and what to beat next time.
+- comparedWithLastTime: 1–2 sentences comparing with the earlier sessions given (previousSessions, newest first). Earlier sessions only record reps, clean reps and how long they took: compare only those (more or fewer reps, a higher or lower share of clean reps), never depth or pace, which aren't recorded for them. If there are none, say this is the first one on record and what to beat next time.
 - nextSession.plan: one concrete plan (sets × reps, or switching to the easier or harder version of the move), with the reason in a few words.
 - nextSession.drill: one simple drill or cue to fix the main issue, in one sentence.`;
 
