@@ -20,7 +20,7 @@ const Attempt = z.object({
 
 export const AnalysisRequest = z.object({
   /** The live pairing session: only a TV mid-workout can ask, and only a few times. */
-  code: z.string().regex(/^\d{6}$/),
+  code: z.string().regex(/^(\d{4}|\d{6})$/),
   channel: z.string().regex(/^\/session\/[0-9a-f-]{36}$/),
   move: z.object({ id: z.string().regex(/^[a-z-]{2,40}$/), name: z.string().min(1).max(40) }),
   plan: z.object({ sets: z.number().int().min(1).max(10), reps: z.number().int().min(1).max(50) }),

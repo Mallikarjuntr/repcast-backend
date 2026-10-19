@@ -93,6 +93,10 @@ Resources:
         'POST /coach/analysis':
           ThrottlingBurstLimit: 2
           ThrottlingRateLimit: 1
+        # Pairing codes are 4 digits: slow down anyone trying them one after another.
+        'GET /sessions/{code}':
+          ThrottlingBurstLimit: 5
+          ThrottlingRateLimit: 2
 
   ApiFunctionLogs:
     Type: AWS::Logs::LogGroup

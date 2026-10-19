@@ -35,7 +35,7 @@ async function createSession(): Promise<APIGatewayProxyResultV2> {
 }
 
 async function getSession(code: string | undefined): Promise<APIGatewayProxyResultV2> {
-  if (!isValidCode(code)) return json(400, { error: 'The code is 6 digits.' });
+  if (!isValidCode(code)) return json(400, { error: 'The code is 4 digits.' });
   const { Item } = await db.send(new GetCommand({ TableName: TABLE_NAME, Key: sessionKey(code) }));
   const session = Item as Session | undefined;
   if (!session || session.ttl < Math.floor(Date.now() / 1000)) {

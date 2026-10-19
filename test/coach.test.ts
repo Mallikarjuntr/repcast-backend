@@ -35,7 +35,7 @@ describe('analysis request', () => {
 
   it('rejects anything that is not a live pairing session', () => {
     expect(AnalysisRequest.safeParse({ ...workout, channel: '/other/thing' }).success).toBe(false);
-    expect(AnalysisRequest.safeParse({ ...workout, code: '1234' }).success).toBe(false);
+    expect(AnalysisRequest.safeParse({ ...workout, code: '12345' }).success).toBe(false);
   });
 
   it('caps sizes, so one request cannot be made expensive', () => {
