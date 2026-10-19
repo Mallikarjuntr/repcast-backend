@@ -57,6 +57,15 @@ describe('workout facts', () => {
     expect(facts.formNotes[0]).toEqual({ note: 'Push your knees out', times: 2, firstAtAttempt: 3 });
   });
 
+  it('works out the totals and the change since last time, so the model never counts', () => {
+    expect(facts.totals).toMatchObject({ attempts: 6, counted: 5, clean: 3, withANote: 2, noReps: 1, cleanPercentOfCounted: 60 });
+    // Last time: 30 reps, 24 clean (80%). Today: 5 counted, 3 clean (60%).
+    expect(facts.vsLastTime).toEqual({ daysAgo: 2, lastReps: 30, todayReps: 5, repsChange: -25, lastCleanPercent: 80, todayCleanPercent: 60, cleanPercentChange: -20 });
+    const same = workoutFacts(AnalysisRequest.parse({ ...workout, previous: [{ daysAgo: 1, reps: 5, cleanReps: 3, seconds: 90 }] }));
+    expect(same.vsLastTime).toMatchObject({ repsChange: 0, cleanPercentChange: 0 });
+    expect(workoutFacts(AnalysisRequest.parse({ ...workout, previous: [] })).vsLastTime).toBeNull();
+  });
+
   it('explains what the degrees mean for the move', () => {
     expect(facts.measure).toMatch(/knee angle/);
     expect(workoutFacts(AnalysisRequest.parse({ ...workout, move: { id: 'push-up', name: 'Push-ups' } })).measure).toMatch(/elbow/);

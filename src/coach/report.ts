@@ -96,6 +96,10 @@ export function workoutFacts(req: AnalysisRequest) {
     notes.set(said, { count: (seen?.count ?? 0) + 1, firstAttempt: seen?.firstAttempt ?? i + 1 });
   });
   const counted = req.attempts.filter((a) => a.counted).length;
+  const clean = req.attempts.filter((a) => a.verdict === 'good').length;
+  const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : null);
+  const last = req.previous[0];
+  const lastClean = last?.cleanReps;
   return {
     move: req.move.name,
     measure: measureFor(req.move.id),
@@ -104,12 +108,27 @@ export function workoutFacts(req: AnalysisRequest) {
     totals: {
       attempts: req.attempts.length,
       counted,
-      clean: req.attempts.filter((a) => a.verdict === 'good').length,
+      clean,
+      withANote: counted - clean,
+      noReps: req.attempts.length - counted,
+      cleanPercentOfCounted: pct(clean, counted),
       plannedReps: req.plan.sets * req.plan.reps,
     },
     sets,
     formNotes: [...notes.entries()].map(([note, v]) => ({ note, times: v.count, firstAtAttempt: v.firstAttempt })).sort((a, b) => b.times - a.times),
-    previousSessions: req.previous,
+    // Worked out here, not left to the model: a small model got "more reps" wrong for equal counts.
+    vsLastTime: last
+      ? {
+          daysAgo: last.daysAgo,
+          lastReps: last.reps,
+          todayReps: counted,
+          repsChange: counted - last.reps,
+          lastCleanPercent: lastClean === undefined ? null : pct(lastClean, last.reps),
+          todayCleanPercent: pct(clean, counted),
+          cleanPercentChange: lastClean === undefined || last.reps === 0 || counted === 0 ? null : pct(clean, counted)! - pct(lastClean, last.reps)!,
+        }
+      : null,
+    earlierSessions: req.previous.length,
   };
 }
 
@@ -120,6 +139,7 @@ What you get is numbers only: reps, verdicts, depth, pace and form notes the cam
 How to write:
 - Talk to the person directly ("you"), warm and honest, like a good personal trainer. No hype, no emojis, no markdown.
 - Use only what the numbers show. Quote a few of them (reps, degrees, seconds) so it feels specific. Never invent reps, sessions or trends that aren't in the data. If there's too little data to say something, say so plainly.
+- Counts are already worked out for you in "totals" and "vsLastTime": copy those numbers exactly, never count or subtract yourself. A change of 0 means "the same".
 - "clean" means counted with good form; "fix" means counted with a note; "no-rep" didn't count. Spotter never counts a rep that doesn't meet the standard; don't soften that.
 - Short sentences, everyday words. This is read across a room.
 - No medical or injury diagnosis. If something looks like pain or strain might be involved (for example very slow, uneven reps), suggest taking it easier rather than diagnosing.
@@ -129,7 +149,7 @@ Fields:
 - coachNote: 1–2 sentences, the coach's overall word.
 - howItWent: 2 sentences on the session as a whole.
 - numbers: 2 to 4 findings from the data, each a short title (2–4 words) and one sentence. Look at: depth consistency across sets, whether later sets got shallower or faster (tiredness), pace, the most common form note and when it started.
-- comparedWithLastTime: 1–2 sentences comparing with the earlier sessions given (previousSessions, newest first). Earlier sessions only record reps, clean reps and how long they took: compare only those (more or fewer reps, a higher or lower share of clean reps), never depth or pace, which aren't recorded for them. If there are none, say this is the first one on record and what to beat next time.
+- comparedWithLastTime: 1–2 sentences from "vsLastTime" only: reps (repsChange) and the share of clean reps (cleanPercentChange), saying "the same" when a change is 0. Earlier sessions don't record depth or pace, so never compare those. If vsLastTime is null, say this is the first one on record and what to beat next time.
 - nextSession.plan: one concrete plan (sets × reps, or switching to the easier or harder version of the move), with the reason in a few words.
 - nextSession.drill: one simple drill or cue to fix the main issue, in one sentence.`;
 
