@@ -13,12 +13,12 @@ import { AnalysisRequest, Report, SYSTEM_PROMPT, userMessage } from './report.js
 const TABLE_NAME = process.env.TABLE_NAME ?? '';
 /**
  * Models to try, in order; the first that answers is kept for the container. Two kinds:
+ * - Claude (`anthropic.` ids) runs in the org account, with keys kept in Parameter Store. Haiku
+ *   comes first: the cheapest Claude, and the facts are summarised in code, so the writing is light.
  * - Amazon Nova (`amazon.` ids) runs in this account and region, called with the Lambda's own role.
- * - Claude (`anthropic.` ids) runs in the org account, with keys kept in Parameter Store. Those keys
- *   aren't allowed to invoke models yet, so Claude is left out of the list until they are.
- * A model that's refused or unknown is skipped.
+ * A model that's refused or unknown is skipped (and logged with the reason).
  */
-const MODELS = (process.env.BEDROCK_MODELS ?? 'global.amazon.nova-2-lite-v1:0')
+const MODELS = (process.env.BEDROCK_MODELS ?? 'global.anthropic.claude-haiku-5-5,global.amazon.nova-2-lite-v1:0')
   .split(',')
   .map((m) => m.trim())
   .filter(Boolean);
