@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   RepCast bootstrap - deploy once by hand (CloudShell or console). Lets GitHub Actions in the
-  spotter-backend repo deploy the RepCast stack (named spotter) through GitHub OIDC (no stored AWS keys),
+  repcast-backend repo deploy the RepCast stack (named spotter) through GitHub OIDC (no stored AWS keys),
   creates the artifacts bucket used by SAM deploys, and adds a monthly budget alert.
 
 Parameters:
@@ -10,7 +10,7 @@ Parameters:
     Default: Mallikarjuntr
   GitHubRepo:
     Type: String
-    Default: spotter-backend
+    Default: repcast-backend
   GitHubOwnerId:
     Type: String
     Default: '137713114'
@@ -177,8 +177,8 @@ Resources:
 
 Outputs:
   DeployRoleArn:
-    Description: Put this in the spotter-backend repo as the Actions variable AWS_ROLE_ARN.
+    Description: Put this in the repcast-backend repo as the Actions variable AWS_ROLE_ARN.
     Value: !GetAtt DeployRole.Arn
   ArtifactsBucketName:
-    Description: Put this in the spotter-backend repo as the Actions variable SAM_ARTIFACTS_BUCKET.
+    Description: Put this in the repcast-backend repo as the Actions variable SAM_ARTIFACTS_BUCKET.
     Value: !Ref ArtifactsBucket
