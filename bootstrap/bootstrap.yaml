@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Spotter bootstrap - deploy once by hand (CloudShell or console). Lets GitHub Actions in the
-  spotter-backend repo deploy the Spotter stack through GitHub OIDC (no stored AWS keys),
+  RepCast bootstrap - deploy once by hand (CloudShell or console). Lets GitHub Actions in the
+  spotter-backend repo deploy the RepCast stack (named spotter) through GitHub OIDC (no stored AWS keys),
   creates the artifacts bucket used by SAM deploys, and adds a monthly budget alert.
 
 Parameters:
