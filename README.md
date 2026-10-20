@@ -4,6 +4,8 @@ AWS infrastructure and serverless functions for [RepCast](https://github.com/Mal
 
 ## What it creates
 
+The AWS resource names start with `spotter`, the project's working name before it became RepCast; they are kept so the live endpoints and keys don't change.
+
 | Resource | Purpose | Cost notes |
 |---|---|---|
 | AppSync Events API (`spotter-events`) | Live link: the camera device publishes pose events, the TV subscribes (one channel per session) | ~$1 per million messages |
