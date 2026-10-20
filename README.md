@@ -1,5 +1,7 @@
 # RepCast backend
 
+<img src="docs/logos/aws-appsync.svg" width="28" height="28" alt="" align="absmiddle"> AppSync Events &nbsp; <img src="docs/logos/amazon-api-gateway.svg" width="28" height="28" alt="" align="absmiddle"> API Gateway &nbsp; <img src="docs/logos/aws-lambda.svg" width="28" height="28" alt="" align="absmiddle"> Lambda &nbsp; <img src="docs/logos/amazon-dynamodb.svg" width="28" height="28" alt="" align="absmiddle"> DynamoDB &nbsp; <img src="docs/logos/amazon-polly.svg" width="28" height="28" alt="" align="absmiddle"> Polly &nbsp; <img src="docs/logos/amazon-bedrock.svg" width="28" height="28" alt="" align="absmiddle"> Bedrock (Nova) &nbsp; <img src="docs/logos/aws-cloudformation.svg" width="28" height="28" alt="" align="absmiddle"> SAM / CloudFormation
+
 AWS infrastructure and serverless functions for [RepCast](https://github.com/Mallikarjuntr/repcast-tv-app), defined as CloudFormation (AWS SAM) and deployed by GitHub Actions. No long-lived AWS keys are stored anywhere: Actions signs in to AWS through GitHub OIDC.
 
 ## What it creates
