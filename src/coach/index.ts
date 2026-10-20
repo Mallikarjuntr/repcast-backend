@@ -222,7 +222,7 @@ async function useAllowance(code: string, channel: string, moveId: string): Prom
   } catch (err) {
     if (!(err instanceof TransactionCanceledException)) throw err;
     if (err.CancellationReasons?.[1]?.Code === 'ConditionalCheckFailed') {
-      return { ok: false, status: 429, error: "Spotter's AI coach has written all its notes for today. Your charts are all here; try the AI note tomorrow." };
+      return { ok: false, status: 429, error: "RepCast's AI coach has written all its notes for today. Your charts are all here; try the AI note tomorrow." };
     }
     return { ok: false, status: 429, error: 'Someone else just asked too. Try again in a moment.' };
   }

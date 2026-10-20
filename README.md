@@ -1,6 +1,6 @@
-# Spotter backend
+# RepCast backend
 
-AWS infrastructure and serverless functions for [Spotter](https://github.com/Mallikarjuntr/spotter-tv-app), defined as CloudFormation (AWS SAM) and deployed by GitHub Actions. No long-lived AWS keys are stored anywhere: Actions signs in to AWS through GitHub OIDC.
+AWS infrastructure and serverless functions for [RepCast](https://github.com/Mallikarjuntr/repcast-tv-app), defined as CloudFormation (AWS SAM) and deployed by GitHub Actions. No long-lived AWS keys are stored anywhere: Actions signs in to AWS through GitHub OIDC.
 
 ## What it creates
 
@@ -22,7 +22,7 @@ Everything is deleted with the stack.
 |---|---|---|
 | Phone and TV must talk in real time, both behind home routers, with no server of ours to run | **AWS AppSync Events** | Managed WebSocket pub/sub with channels: one channel per workout, the phone publishes reps and framing, the TV subscribes; also carries the WebRTC set-up so the video can go straight across the home Wi-Fi |
 | A TV and a phone with no accounts must find each other | **API Gateway (HTTP API) + Lambda + DynamoDB** | A 4-digit code maps to a private channel for 2 hours, then DynamoDB's TTL deletes it. Nothing about the person is stored |
-| Fire TV's own text-to-speech is silent for apps ([friction #10](https://github.com/Mallikarjuntr/spotter-tv-app/blob/main/docs/FRICTION.md#10)) | **Amazon Polly** (neural, Indian English) | Every coach line is recorded once, in CI, and bundled into the app: no voice call at workout time, no latency, works offline |
+| Fire TV's own text-to-speech is silent for apps ([friction #10](https://github.com/Mallikarjuntr/repcast-tv-app/blob/main/docs/FRICTION.md#10)) | **Amazon Polly** (neural, Indian English) | Every coach line is recorded once, in CI, and bundled into the app: no voice call at workout time, no latency, works offline |
 | A coach's read of the workout, in plain words | **Amazon Bedrock** (Amazon Nova) | Gets only the numbers (never video), works out nothing itself (the totals and comparisons are computed in code first) and writes the note in a fixed structure |
 | No long-lived keys anywhere | **IAM + GitHub OIDC, CloudFormation (SAM), SSM Parameter Store** | Deploys only from this repo's `main`; the second account's Bedrock keys are encrypted and readable only by the coach function |
 | Never a surprise bill | **AWS Budgets** + per-route throttles + report limits | A monthly budget alert, API throttles, and AI report limits |

@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Spotter backend - live phone-to-TV link (AppSync Events), pairing and session API
+  RepCast backend - live phone-to-TV link (AppSync Events), pairing and session API
   (HTTP API + Lambda) and the data table (DynamoDB). Everything is deleted with the stack.
 
 Parameters:
@@ -42,7 +42,7 @@ Resources:
     Type: AWS::AppSync::ApiKey
     Properties:
       ApiId: !GetAtt EventsApi.ApiId
-      Description: Public client key for the Spotter TV and camera apps
+      Description: Public client key for the RepCast TV and camera apps
       Expires: !Ref ApiKeyExpires
 
   # Provisioned 2/2 capacity stays inside DynamoDB's always-free tier.
@@ -78,7 +78,7 @@ Resources:
         # changed default never reached the stack.
         AllowOrigins:
           - https://mallikarjuntr.github.io
-          - https://spotter-tv.netlify.app
+          - https://repcast.netlify.app
           - http://localhost:5173
           - http://localhost:4173
         AllowMethods: [GET, POST, OPTIONS]
