@@ -9,6 +9,7 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda
 import { z } from 'zod';
 import { sessionKey } from '../api/sessions.js';
 import { AnalysisRequest, Report, SYSTEM_PROMPT, userMessage } from './report.js';
+import { firstAnswer } from './retry.js';
 
 const TABLE_NAME = process.env.TABLE_NAME ?? '';
 /**
@@ -25,8 +26,10 @@ const MODELS = (process.env.BEDROCK_MODELS ?? 'org:apac.amazon.nova-lite-v1:0,in
   .filter(Boolean);
 /** Region of the org account's models (its policy allows Claude Haiku 4.5 through the India profile). */
 const ORG_REGION = process.env.ORG_REGION ?? process.env.CLAUDE_REGION ?? 'ap-south-1';
-/** API Gateway gives up at 30 s: don't start another model after this. */
-const LAST_START_MS = 14_000;
+/** A report takes 1.5–3 s; a call that's still going after this is cut off and made again. */
+const ATTEMPT_MS = 7_000;
+/** API Gateway gives up at 30 s: no call starts after this (so at most about 18 + 7 s, plus set-up). */
+const LAST_START_MS = 18_000;
 const KEY_ID_PARAM = process.env.KEY_ID_PARAM ?? '/spotter/bedrock/access-key-id';
 const SECRET_PARAM = process.env.SECRET_PARAM ?? '/spotter/bedrock/secret-access-key';
 /**
@@ -88,7 +91,7 @@ const REPORT_TOOL = { name: 'write_report', description: 'Hand the finished repo
  */
 const olderClaude = (model: string) => /claude-(haiku|sonnet|opus)-4-[0-5]|claude-3/.test(model);
 
-async function claudeReport(model: string, content: string): Promise<Report | null> {
+async function claudeReport(model: string, content: string, signal?: AbortSignal): Promise<Report | null> {
   const client = await claudeClient();
   if (olderClaude(model)) {
     const response = await client.messages.create({
@@ -98,7 +101,7 @@ async function claudeReport(model: string, content: string): Promise<Report | nu
       tools: [{ ...REPORT_TOOL, input_schema: reportSchema as Anthropic.Tool.InputSchema }],
       tool_choice: { type: 'tool', name: REPORT_TOOL.name },
       messages: [{ role: 'user', content }],
-    });
+    }, { signal });
     console.log('usage', { model, input: response.usage.input_tokens, output: response.usage.output_tokens, stop: response.stop_reason });
     const call = response.content.find((block) => block.type === 'tool_use');
     const report = Report.safeParse(call?.type === 'tool_use' ? call.input : null);
@@ -112,13 +115,13 @@ async function claudeReport(model: string, content: string): Promise<Report | nu
     output_config: { effort: 'low', format: zodOutputFormat(Report) },
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content }],
-  });
+  }, { signal });
   console.log('usage', { model, input: response.usage.input_tokens, output: response.usage.output_tokens, stop: response.stop_reason });
   return response.stop_reason !== 'refusal' ? response.parsed_output : null;
 }
 
 
-async function novaReport(model: string, content: string, client: BedrockRuntimeClient = runtime): Promise<Report | null> {
+async function novaReport(model: string, content: string, client: BedrockRuntimeClient = runtime, signal?: AbortSignal): Promise<Report | null> {
   const out = await client.send(
     new ConverseCommand({
       modelId: model,
@@ -130,6 +133,7 @@ async function novaReport(model: string, content: string, client: BedrockRuntime
         toolChoice: { tool: { name: REPORT_TOOL.name } },
       },
     }),
+    { abortSignal: signal },
   );
   console.log('usage', { model, input: out.usage?.inputTokens, output: out.usage?.outputTokens, stop: out.stopReason });
   const call = out.output?.message?.content?.find((block) => block.toolUse)?.toolUse;
@@ -146,30 +150,28 @@ function unavailable(err: unknown): number | null {
 }
 
 async function writeReport(content: string): Promise<(Report & { writtenBy: string }) | null> {
-  const started = Date.now();
-  for (let i = 0; i < MODELS.length && Date.now() - started < LAST_START_MS; i++) {
-    const at = (working + i) % MODELS.length;
-    const model = MODELS[at]!;
-    const org = model.startsWith('org:');
-    const id = org ? model.slice(4) : model;
-    const claudeModel = id.includes('anthropic.');
-    try {
-      const report = claudeModel ? await claudeReport(id, content) : await novaReport(id, content, org ? await orgRuntimeClient() : runtime);
-      if (report) {
-        working = at;
-        return { ...report, writtenBy: claudeModel ? 'Claude' : 'Amazon Nova' };
-      }
-      // A refusal or a malformed report: another model may still write it.
-    } catch (err) {
-      const status = unavailable(err);
-      if (status === null) throw err;
-      console.error('Skipping model', model, status, (err as Error).message);
-    }
-  }
-  return null;
+  const answer = await firstAnswer(
+    MODELS.length,
+    working,
+    async (index, signal) => {
+      const model = MODELS[index]!;
+      const org = model.startsWith('org:');
+      const id = org ? model.slice(4) : model;
+      return id.includes('anthropic.') ? claudeReport(id, content, signal) : novaReport(id, content, org ? await orgRuntimeClient() : runtime, signal);
+    },
+    {
+      attemptMs: ATTEMPT_MS,
+      lastStartMs: LAST_START_MS,
+      skip: (err) => unavailable(err) !== null,
+      onError: (index, err, skipped) => console.error(skipped ? 'Skipping model' : 'Asking again', MODELS[index], unavailable(err) ?? (err as Error).name, (err as Error).message),
+    },
+  );
+  if (!answer) return null;
+  working = answer.index;
+  return { ...answer.value, writtenBy: MODELS[answer.index]!.includes('anthropic.') ? 'Claude' : 'Amazon Nova' };
 }
 
-type Allowance = { ok: true; left: { move: number; session: number } } | { ok: false; status: number; error: string };
+type Allowance = { ok: true; left: { move: number; session: number }; day: string } | { ok: false; status: number; error: string };
 
 /**
  * Checks the session is live and this TV's and that the limits allow one more report, then counts
@@ -226,7 +228,31 @@ async function useAllowance(code: string, channel: string, moveId: string): Prom
     }
     return { ok: false, status: 429, error: 'Someone else just asked too. Try again in a moment.' };
   }
-  return { ok: true, left: { move: MAX_PER_MOVE - move - 1, session: MAX_PER_SESSION - session - 1 } };
+  return { ok: true, left: { move: MAX_PER_MOVE - move - 1, session: MAX_PER_SESSION - session - 1 }, day };
+}
+
+/** A report that couldn't be written isn't counted, so the TV can simply ask again. */
+async function giveBack(code: string, moveId: string, day: string): Promise<void> {
+  try {
+    await db.send(
+      new TransactWriteCommand({
+        TransactItems: [
+          {
+            Update: {
+              TableName: TABLE_NAME,
+              Key: sessionKey(code),
+              UpdateExpression: 'ADD analyses :minus, #mv :minus',
+              ExpressionAttributeNames: { '#mv': `analyses_${moveId}` },
+              ExpressionAttributeValues: { ':minus': -1 },
+            },
+          },
+          { Update: { TableName: TABLE_NAME, Key: { pk: `COACH#DAY#${day}`, sk: 'META' }, UpdateExpression: 'ADD reports :minus', ExpressionAttributeValues: { ':minus': -1 } } },
+        ],
+      }),
+    );
+  } catch (err) {
+    console.error('Could not give the note back', err);
+  }
 }
 
 async function analyse(body: string | undefined): Promise<APIGatewayProxyResultV2> {
@@ -245,8 +271,17 @@ async function analyse(body: string | undefined): Promise<APIGatewayProxyResultV
 
   // Shape only, never the numbers themselves: enough to tell a TV that sent no history from a model that ignored it.
   console.log('request', { move: request.data.move.id, attempts: request.data.attempts.length, previous: request.data.previous.length });
-  const report = await writeReport(userMessage(request.data));
-  if (!report) return json(502, { error: "The coach couldn't write this one. Try again in a moment." });
+  let report: Awaited<ReturnType<typeof writeReport>>;
+  try {
+    report = await writeReport(userMessage(request.data));
+  } catch (err) {
+    await giveBack(request.data.code, request.data.move.id, allowance.day);
+    throw err;
+  }
+  if (!report) {
+    await giveBack(request.data.code, request.data.move.id, allowance.day);
+    return json(502, { error: "The coach couldn't write this one. Try again in a moment." });
+  }
   return json(200, { report, left: allowance.left });
 }
 
